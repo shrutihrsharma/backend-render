@@ -17,19 +17,14 @@ const sessions = new Map(); // replaces Durable Objects
 app.get("/create", (req, res) => {
   try {
     const sessionId = uuidv4().slice(0, 6).toUpperCase();
-    const hostToken = uuidv4();
+    const session = new GameSession(sessionId);
 
-    sessions.set(sessionId, {
-      players: [],
-      phase: "WAITING",
-      hostToken,
-      hostId: null,
-      question: "",
-      buzzerEnabled: false,
-      currentBuzzPlayerId: null,
+    sessions.set(sessionId, session);
+
+    res.json({
+      sessionId,
+      hostToken: session.hostToken,
     });
-
-    res.json({ sessionId, hostToken });
   } catch (e) {
     console.error("CREATE ERROR:", e);
     res.status(500).send("Server error");
@@ -40,11 +35,15 @@ app.get("/create", (req, res) => {
 wss.on("connection", (ws, req) => {
   const sessionId = req.url.split("/").pop();
 
-  const session = sessions[sessionId];
-  if (!session) return ws.close();
+  const session = sessions.get(sessionId);
+  if (!session) {
+    ws.close();
+    return;
+  }
 
   session.addConnection(ws);
 });
+
 
 class GameSession {
   constructor(sessionId) {
