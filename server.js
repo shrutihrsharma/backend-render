@@ -11,7 +11,7 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const sessions = {}; // replaces Durable Objects
+const sessions = new Map(); // replaces Durable Objects
 
 // ===== CREATE SESSION =====
 app.get("/create", (req, res) => {
