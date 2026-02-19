@@ -15,14 +15,25 @@ const sessions = {}; // replaces Durable Objects
 
 // ===== CREATE SESSION =====
 app.get("/create", (req, res) => {
-  const sessionId = uuidv4().slice(0, 6).toUpperCase();
+  try {
+    const sessionId = uuidv4().slice(0, 6).toUpperCase();
+    const hostToken = uuidv4();
 
-  sessions[sessionId] = new GameSession(sessionId);
+    sessions.set(sessionId, {
+      players: [],
+      phase: "WAITING",
+      hostToken,
+      hostId: null,
+      question: "",
+      buzzerEnabled: false,
+      currentBuzzPlayerId: null,
+    });
 
-  res.json({
-    sessionId,
-    hostToken: sessions[sessionId].hostToken,
-  });
+    res.json({ sessionId, hostToken });
+  } catch (e) {
+    console.error("CREATE ERROR:", e);
+    res.status(500).send("Server error");
+  }
 });
 
 // ===== WEBSOCKET =====
