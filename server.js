@@ -14,10 +14,16 @@ const multer = require("multer");
 const AdmZip = require("adm-zip");
 const fs = require("fs");
 const path = require("path");
-const upload = multer({ dest: "temp/" });
+const upload = multer({
+  dest: "temp/",
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+});
 
 // Upload quiz pack (zip file with quiz.json and media)
 app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
+  if (!req.file.originalname.endsWith(".zip")) {
+    return res.status(400).send("Only ZIP files allowed");
+  }
   const sessionId = req.params.sessionId;
   const session = sessions.get(sessionId);
 
@@ -36,10 +42,33 @@ app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
   }
 
   const rounds = JSON.parse(fs.readFileSync(quizJsonPath, "utf8"));
+  if (!Array.isArray(rounds)) {
+    return res.status(400).send("Invalid quiz format");
+  }
+
+  for (const round of rounds) {
+    if (!round.name || !Array.isArray(round.questions)) {
+      return res.status(400).send("Invalid round format");
+    }
+
+    for (const q of round.questions) {
+      if (!q.prompt || !q.answer) {
+        return res.status(400).send("Invalid question format");
+      }
+
+      if (q.type && !["image", "audio", "video"].includes(q.type)) {
+        return res.status(400).send("Invalid media type");
+      }
+    }
+  }
+
+  if (q.mediaFile.includes("..")) {
+    return res.status(400).send("Invalid file path");
+  }
 
   // rewrite mediaFile -> mediaUrl
-  rounds.forEach(round => {
-    round.questions.forEach(q => {
+  rounds.forEach((round) => {
+    round.questions.forEach((q) => {
       if (q.mediaFile) {
         q.mediaUrl = `/media/${sessionId}/${q.mediaFile}`;
         delete q.mediaFile;
@@ -48,6 +77,7 @@ app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
   });
 
   session.ROUNDS = rounds;
+  session.packUploaded = true;
 
   res.json({ status: "Quiz pack uploaded successfully" });
 });
@@ -110,6 +140,7 @@ class GameSession {
     this.revealAnswer = null;
     this.topScore = 0;
     this.individualWinner = null;
+    this.packUploaded = false;
 
     this.teams = ["🔥 Fire", "🌍 Earth", "🌊 Water"];
 
@@ -236,11 +267,32 @@ class GameSession {
 
     if (data.type === "END_GAME") {
       this.phase = "ENDED";
+      this.question = "";
+      this.currentQuestion = null;
+      this.currentAnswer = "";
+      this.buzzerEnabled = false;
+      this.currentBuzzPlayerId = null;
+      this.revealAnswer = null;
 
       this.topScore = Math.max(...this.players.map((p) => p.score));
       this.individualWinner = this.players.find(
         (p) => p.score === this.topScore,
       );
+
+      this.broadcast();
+    }
+
+    if (data.type === "RESET_GAME" && data.playerId === this.hostId) {
+      this.phase = "WAITING";
+      this.roundIndex = 0;
+      this.questionIndex = -1;
+      this.players.forEach((p) => (p.score = 0));
+      this.individualWinner = null;
+      this.topScore = 0;
+      this.question = "";
+      this.currentQuestion = null;
+      this.currentAnswer = "";
+      this.buzzerEnabled = false;
 
       this.broadcast();
     }
@@ -268,6 +320,7 @@ class GameSession {
       currentBuzzPlayerId: this.currentBuzzPlayerId,
       individualWinner: this.individualWinner,
       topScore: this.topScore,
+      packUploaded: this.packUploaded,
     });
 
     this.sessions.forEach((ws) => ws.send(payload));
