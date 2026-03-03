@@ -59,7 +59,7 @@ app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
       if (q.type && !["image", "audio", "video"].includes(q.type)) {
         return res.status(400).send("Invalid media type");
       }
-      if (q.mediaFile.includes("..")) {
+      if (q.mediaFile && q.mediaFile.includes("..")) {
         return res.status(400).send("Invalid file path");
       }
     }
