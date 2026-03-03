@@ -3,15 +3,57 @@ const http = require("http");
 const WebSocket = require("ws");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
-
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
-
 const sessions = new Map(); // replaces Durable Objects
+
+const multer = require("multer");
+const AdmZip = require("adm-zip");
+const fs = require("fs");
+const path = require("path");
+const upload = multer({ dest: "temp/" });
+
+// Upload quiz pack (zip file with quiz.json and media)
+app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = sessions.get(sessionId);
+
+  if (!session) return res.status(404).send("Session not found");
+
+  const zip = new AdmZip(req.file.path);
+  const extractPath = path.join(__dirname, "uploads", sessionId);
+
+  fs.mkdirSync(extractPath, { recursive: true });
+  zip.extractAllTo(extractPath, true);
+
+  const quizJsonPath = path.join(extractPath, "quiz.json");
+
+  if (!fs.existsSync(quizJsonPath)) {
+    return res.status(400).send("quiz.json missing");
+  }
+
+  const rounds = JSON.parse(fs.readFileSync(quizJsonPath, "utf8"));
+
+  // rewrite mediaFile -> mediaUrl
+  rounds.forEach(round => {
+    round.questions.forEach(q => {
+      if (q.mediaFile) {
+        q.mediaUrl = `/media/${sessionId}/${q.mediaFile}`;
+        delete q.mediaFile;
+      }
+    });
+  });
+
+  session.ROUNDS = rounds;
+
+  res.json({ status: "Quiz pack uploaded successfully" });
+});
+
+// Serve media files
+app.use("/media", express.static(path.join(__dirname, "uploads")));
 
 // ===== CREATE SESSION =====
 app.get("/create", (req, res) => {
