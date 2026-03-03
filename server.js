@@ -62,6 +62,10 @@ app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
       if (q.mediaFile && q.mediaFile.includes("..")) {
         return res.status(400).send("Invalid file path");
       }
+
+      if (q.mediaUrl && q.mediaUrl.includes("..")) {
+        return res.status(400).send("Invalid file path");
+      }
     }
   }
 
@@ -71,6 +75,10 @@ app.post("/upload-pack/:sessionId", upload.single("file"), (req, res) => {
       if (q.mediaFile) {
         q.mediaUrl = `/media/${sessionId}/${q.mediaFile}`;
         delete q.mediaFile;
+      }
+
+      if (q.mediaUrl && !q.mediaUrl.startsWith("/media/")) {
+        q.mediaUrl = `/media/${sessionId}/${q.mediaUrl}`;
       }
     });
   });
