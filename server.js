@@ -9,14 +9,59 @@ app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const sessions = new Map(); // replaces Durable Objects
-
-const multer = require("multer");
+const axios = require("axios");
 const AdmZip = require("adm-zip");
+const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const upload = multer({
   dest: "temp/",
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
+});
+
+app.post("/load-pack-from-url/:sessionId", async (req, res) => {
+  const session = sessions.get(req.params.sessionId);
+  if (!session) return res.status(404).send("Session not found");
+
+  const url = req.body.url;
+
+  try {
+    const response = await axios({
+      method: "GET",
+      url,
+      responseType: "arraybuffer",
+    });
+
+    const zipPath = path.join(__dirname, "temp.zip");
+    fs.writeFileSync(zipPath, response.data);
+
+    const extractPath = path.join(__dirname, "uploads", req.params.sessionId);
+    fs.mkdirSync(extractPath, { recursive: true });
+
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(extractPath, true);
+
+    const quizJson = JSON.parse(
+      fs.readFileSync(path.join(extractPath, "quiz.json"), "utf8"),
+    );
+
+    quizJson.forEach((round) => {
+      round.questions.forEach((q) => {
+        if (q.mediaFile) {
+          q.mediaUrl = `/media/${req.params.sessionId}/${q.mediaFile}`;
+          delete q.mediaFile;
+        }
+      });
+    });
+
+    session.ROUNDS = quizJson;
+    session.packUploaded = true;
+
+    res.json({ status: "Quiz pack loaded successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Failed to download quiz pack");
+  }
 });
 
 // Upload quiz pack (zip file with quiz.json and media)
