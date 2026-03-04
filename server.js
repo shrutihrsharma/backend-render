@@ -45,11 +45,41 @@ app.post("/load-pack-from-url/:sessionId", async (req, res) => {
       fs.readFileSync(path.join(extractPath, "quiz.json"), "utf8"),
     );
 
+    if (!Array.isArray(quizJson)) {
+      return res.status(400).send("Invalid quiz format");
+    }
+
+    for (const round of quizJson) {
+      if (!round.name || !Array.isArray(round.questions)) {
+        return res.status(400).send("Invalid round format");
+      }
+
+      for (const q of round.questions) {
+        if (!q.prompt || !q.answer) {
+          return res.status(400).send("Invalid question format");
+        }
+
+        if (q.type && !["image", "audio", "video"].includes(q.type)) {
+          return res.status(400).send("Invalid media type");
+        }
+        if (q.mediaFile && q.mediaFile.includes("..")) {
+          return res.status(400).send("Invalid file path");
+        }
+
+        if (q.mediaUrl && q.mediaUrl.includes("..")) {
+          return res.status(400).send("Invalid file path");
+        }
+      }
+    }
+
     quizJson.forEach((round) => {
       round.questions.forEach((q) => {
         if (q.mediaFile) {
           q.mediaUrl = `/media/${req.params.sessionId}/${q.mediaFile}`;
           delete q.mediaFile;
+        }
+        if (q.mediaUrl && !q.mediaUrl.startsWith("/media/")) {
+          q.mediaUrl = `/media/${sessionId}/${q.mediaUrl}`;
         }
       });
     });
