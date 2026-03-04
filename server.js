@@ -79,7 +79,7 @@ app.post("/load-pack-from-url/:sessionId", async (req, res) => {
           delete q.mediaFile;
         }
         if (q.mediaUrl && !q.mediaUrl.startsWith("/media/")) {
-          q.mediaUrl = `/media/${sessionId}/${q.mediaUrl}`;
+          q.mediaUrl = `/media/${req.params.sessionId}/${q.mediaUrl}`;
         }
       });
     });
